@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nano Banana Pro v11 (Debug Mode)</title>
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --card-bg: #161616;
+            --text-color: #eaeaea;
+            --accent: #ffe135;
+            --accent-hover: #eacc28;
+            --danger: #ff4444;
+            --border: #333;
+            --modal-bg: rgba(0, 0, 0, 0.95);
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+        }
+        
+        h1 { text-align: center; color: var(--accent); margin: 0 0 5px 0; }
+        .model-badge { text-align: center; font-size: 0.75em; color: #666; margin-bottom: 20px; font-family: monospace; }
+
+        .card {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin-bottom: 15px;
+        }
+
+        label { display: block; color: #888; font-size: 0.8em; margin-bottom: 6px; font-weight: 600; text-transform: uppercase;}
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            background: #222;
+            border: 1px solid var(--border);
+            color: white;
+            border-radius: 6px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        textarea { min-height: 100px; resize: vertical; }
+        input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 1em;
+        }
+        .btn-primary { background: var(--accent); color: #000; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-secondary { background: #333; color: #fff; margin-top: 5px; }
+        .btn-secondary:hover { background: #444; }
+        .btn-danger { background: #442222; color: #ff8888; margin-top: 5px; font-size: 0.8em; padding: 8px;}
+        
+        /* Input Image Grid */
+        .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 8px; margin-top: 10px; }
+        .thumb-container { position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); cursor: pointer; }
+        .thumb-container img { width: 100%; height: 100%; object-fit: cover; }
+        .thumb-container:hover { border-color: var(--accent); }
+        .delete-btn { position: absolute; top: 2px; right: 2px; background: var(--danger); color: white; border: none; width: 16px; height: 16px; border-radius: 50%; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        /* Result Area */
+        #resultArea { min-height: 50px; }
+        #resultArea img {
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid #333;
+            cursor: zoom-in;
+            display: block;
+            margin-top: 10px;
+        }
+        .response-text {
+            background: #222;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent);
+            margin-top: 10px;
+            white-space: pre-wrap;
+            color: #fff;
+            font-size: 0.9em;
+        }
+        .error-box {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            color: #ff8888;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            word-wrap: break-word;
+        }
+        
+        /* Raw Data Inspector */
+        details { margin-top: 15px; border-top: 1px solid #333; padding-top: 10px; }
+        summary { color: #888; cursor: pointer; font-size: 0.9em; font-family: monospace; outline: none; }
+        .raw-json {
+            background: #111;
+            color: #0f0;
+            padding: 15px;
+            font-family: monospace;
+            font-size: 0.75em;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            margin-top: 10px;
+            border: 1px solid #333;
+        }
+
+        /* Logs */
+        #logArea {
+            background: #000; color: #4f4;
+            font-family: monospace; font-size: 0.8em;
+            padding: 10px; height: 150px;
+            overflow-y: auto; border-radius: 6px;
+            margin-top: 10px; display: none;
+        }
+
+        /* Config Row */
+        .config-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .config-row > div { flex: 1; min-width: 100px; }
+
+        /* Modal */
+        .modal {
+            display: none; position: fixed; z-index: 100;
+            left: 0; top: 0; width: 100%; height: 100%;
+            background-color: var(--modal-bg);
+            backdrop-filter: blur(5px);
+            align-items: center; justify-content: center;
+            flex-direction: column; padding: 20px; box-sizing: border-box;
+        }
+        .modal-content { max-width: 90%; max-height: 80vh; object-fit: contain; border-radius: 8px; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
+        .modal-actions { display: flex; gap: 10px; margin-top: 15px; width: 100%; max-width: 500px; }
+        .close-modal { position: absolute; top: 20px; right: 30px; color: #fff; font-size: 40px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Nano Banana Pro v11</h1>
+    <div class="model-badge">models/gemini-3-pro-image-preview</div>
+
+    <!-- API Key -->
+    <div class="card">
+        <label>API Key</label>
+        <input type="password" id="apiKey" placeholder="Enter Gemini API Key...">
+    </div>
+
+    <!-- Controls -->
+    <div class="card">
+        <label>Prompt</label>
+        <textarea id="prompt" placeholder="Describe your image..."></textarea>
+
+        <label>Input Images (Max 24)</label>
+        <input type="file" id="fileInput" multiple accept="image/*" style="font-size: 0.9em;">
+        <div class="image-grid" id="inputGrid"></div>
+        <button class="btn btn-danger" onclick="clearImages()" id="clearBtn" style="display:none;">Clear All Images</button>
+
+        <div class="config-row" style="margin-top:10px;">
+            <div>
+                <label>Aspect Ratio</label>
+                <select id="aspectRatio">
+                    <option value="auto">Auto</option>
+                    <option value="1:1">1:1 Square</option>
+                    <option value="16:9">16:9 Landscape</option>
+                    <option value="9:16">9:16 Portrait</option>
+                    <option value="4:3">4:3 (TV)</option>
+                    <option value="3:4">3:4 (Portrait)</option>
+                    <option value="21:9">21:9 Wide</option>
+                </select>
+            </div>
+            <div>
+                <label>Resolution</label>
+                <select id="resolution">
+                    <option value="1k">1K (Standard)</option>
+                    <option value="2k">2K (High Detail)</option>
+                    <option value="4k">4K (Ultra Sharp)</option>
+                </select>
+            </div>
+        </div>
+
+        <br>
+        <button class="btn btn-primary" id="genBtn" onclick="generate()">Generate</button>
+    </div>
+
+    <!-- Logs -->
+    <div id="logArea"></div>
+
+    <!-- Result -->
+    <div class="card" id="resultCard" style="display:none;">
+        <label>Result</label>
+        <div class="loading" id="loader">Generating...</div>
+        <div id="resultArea"></div>
+        
+        <!-- Raw Debugger -->
+        <details id="rawDebug" style="display:none;">
+            <summary>🛠️ Troubleshooting: Click to see Raw API Response</summary>
+            <div class="raw-json" id="rawJsonContent"></div>
+        </details>
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal">
+    <span class="close-modal" onclick="closeModal()">&times;</span>
+    <img class="modal-content" id="modalImg">
+    <div class="modal-actions" id="modalBtns"></div>
+</div>
+
+<script>
+    // --- State ---
+    let inputImages = []; 
+    let lastResult = null;
+    let timerInterval = null;
+
+    // --- Local Storage ---
+    const keyInput = document.getElementById('apiKey');
+    if(localStorage.getItem('nb_api_key')) keyInput.value = localStorage.getItem('nb_api_key');
+    keyInput.addEventListener('input', (e) => localStorage.setItem('nb_api_key', e.target.value));
+
+    // --- Image Input ---
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        if (inputImages.length + files.length > 24) { alert("Max 24 images allowed."); return; }
+
+        for(let file of files) {
+            if(inputImages.length >= 24) break;
+            const b64 = await toBase64(file);
+            inputImages.push({
+                id: Date.now() + Math.random(),
+                mime: file.type,
+                data: b64.split(',')[1],
+                preview: b64
+            });
+        }
+        renderInputGrid();
+        e.target.value = '';
+    });
+
+    function renderInputGrid() {
+        const grid = document.getElementById('inputGrid');
+        grid.innerHTML = '';
+        inputImages.forEach((img, index) => {
+            const div = document.createElement('div');
+            div.className = 'thumb-container';
+            const image = document.createElement('img');
+            image.src = img.preview;
+            image.onclick = () => openModal(img.preview, false);
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delete-btn';
+            delBtn.innerHTML = '×';
+            delBtn.onclick = (e) => { e.stopPropagation(); inputImages.splice(index, 1); renderInputGrid(); };
+            div.appendChild(image);
+            div.appendChild(delBtn);
+            grid.appendChild(div);
+        });
+        document.getElementById('clearBtn').style.display = inputImages.length > 0 ? 'block' : 'none';
+    }
+
+    function clearImages() { inputImages = []; renderInputGrid(); }
+    function toBase64(file) { return new Promise((res, rej) => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => res(r.result); r.onerror = rej; }); }
+
+    // --- Modal ---
+    const modal = document.getElementById('modal');
+    const modalImg = document.getElementById('modalImg');
+    const modalBtns = document.getElementById('modalBtns');
+
+    function openModal(src, isResult) {
+        modal.style.display = 'flex'; modalImg.src = src; modalBtns.innerHTML = ''; 
+        if(isResult && lastResult) {
+            const dlBtn = document.createElement('button');
+            dlBtn.className = 'btn btn-primary'; dlBtn.innerText = 'Download';
+            dlBtn.onclick = () => { const a = document.createElement('a'); a.href = src; a.download = `nano-banana-${Date.now()}.jpg`; a.click(); };
+            
+            const useBtn = document.createElement('button');
+            useBtn.className = 'btn btn-secondary'; useBtn.innerText = 'Use as Input';
+            useBtn.onclick = () => {
+                if(inputImages.length >= 24) { alert('Max 24 input images.'); return; }
+                inputImages.push({ id: Date.now(), mime: lastResult.mime, data: lastResult.data, preview: `data:${lastResult.mime};base64,${lastResult.data}` });
+                renderInputGrid(); closeModal();
+            };
+            modalBtns.appendChild(dlBtn); modalBtns.appendChild(useBtn);
+        }
+    }
+    function closeModal() { modal.style.display = 'none'; }
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); }
+
+    // --- Log & Timer ---
+    const logArea = document.getElementById('logArea');
+    function log(msg, replaceLast = false) {
+        logArea.style.display = 'block';
+        const time = new Date().toLocaleTimeString('en-GB');
+        const content = `<div><span style="color:#666">[${time}]</span> ${msg}</div>`;
+        if(replaceLast && logArea.lastElementChild) { logArea.lastElementChild.innerHTML = `<span style="color:#666">[${time}]</span> ${msg}`; } 
+        else { logArea.innerHTML += content; }
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // --- GENERATE ---
+    async function generate() {
+        const key = keyInput.value;
+        if(!key) return alert('API Key Required');
+
+        let promptText = document.getElementById('prompt').value;
+        const aspect = document.getElementById('aspectRatio').value;
+        const resolution = document.getElementById('resolution').value;
+        
+        const btn = document.getElementById('genBtn');
+        const loader = document.getElementById('loader');
+        const resArea = document.getElementById('resultArea');
+        const rawDebug = document.getElementById('rawDebug');
+        const rawJsonContent = document.getElementById('rawJsonContent');
+
+        // --- Prompt Engineering ---
+        if(aspect !== 'auto') promptText += `\nAspect Ratio: ${aspect}`;
+        if(resolution === '4k') promptText += `\nStyle: Ultra-high resolution, 4k, masterpiece, highly detailed.`;
+        else if(resolution === '2k') promptText += `\nStyle: High resolution, 2k, sharp.`;
+        promptText += `\nOutput Format: JPEG`; 
+
+        btn.disabled = true;
+        loader.style.display = 'block';
+        resArea.innerHTML = '';
+        rawDebug.style.display = 'none';
+        rawJsonContent.innerText = '';
+        document.getElementById('resultCard').style.display = 'block';
+        logArea.innerHTML = ''; 
+
+        // Start Timer
+        let seconds = 0;
+        log('Initializing...');
+        timerInterval = setInterval(() => {
+            seconds++;
+            loader.innerText = `Generating... (${seconds}s)`;
+            if(seconds % 5 === 0) log(`Still processing... (${seconds}s)`, false);
+        }, 1000);
+
+        // --- TIMEOUT CONTROLLER ---
+        // We set this to 5 minutes (300,000ms) to ensure we cover the 3-minute requirement safely.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000); 
+
+        try {
+            const MODEL_NAME = "gemini-3-pro-image-preview"; 
+            const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${key}`;
+
+            let parts = [{ text: promptText }];
+            inputImages.forEach((img, i) => { parts.push({ inline_data: { mime_type: img.mime, data: img.data } }); });
+
+            const payload = {
+                contents: [{ parts: parts }],
+                safetySettings: [
+                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+                ],
+                generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+            };
+
+            log('Sending request...');
+            
+            const req = await fetch(URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: controller.signal // Attaching the timeout signal
+            });
+
+            log('Response received.');
+
+            const data = await req.json();
+            
+            // --- RAW DATA DUMP (Shows what API actually sent) ---
+            rawDebug.style.display = 'block';
+            rawJsonContent.innerText = JSON.stringify(data, null, 2);
+
+            if(!req.ok) {
+                throw new Error(data.error?.message || `HTTP ${req.status}`);
+            }
+
+            const candidate = data.candidates?.[0];
+            
+            if(!candidate) {
+                resArea.innerHTML = `<div class="error-box"><strong>Result:</strong> No candidates returned. Check Raw Data below.</div>`;
+                return;
+            }
+
+            if (candidate.finishReason && candidate.finishReason !== "STOP") {
+                log(`⚠️ Finish Reason: ${candidate.finishReason}`);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-box';
+                errorDiv.innerHTML = `<strong>⚠️ Blocked by API</strong><br>Reason: ${candidate.finishReason}<br>This usually means the model refused the request.`;
+                resArea.appendChild(errorDiv);
+                // We keep going just in case there is text content
+            }
+
+            // --- PROCESS CONTENT ---
+            let hasImage = false;
+            let hasText = false;
+            const contentParts = candidate.content?.parts || [];
+
+            contentParts.forEach(part => {
+                // Compatibility: Check for both snake_case (legacy) and camelCase (current API)
+                const imgData = part.inlineData || part.inline_data;
+
+                if(part.text) {
+                    hasText = true;
+                    log(`Text received.`);
+                    const textDiv = document.createElement('div');
+                    textDiv.className = 'response-text';
+                    textDiv.innerText = part.text;
+                    resArea.appendChild(textDiv);
+                }
+                
+                if(imgData) {
+                    hasImage = true;
+                    log('Image received!');
+                    // Compatibility: Check for both mimeType and mime_type
+                    const mime = imgData.mimeType || imgData.mime_type;
+                    const b64 = imgData.data;
+                    
+                    lastResult = { mime: mime, data: b64 };
+                    const img = document.createElement('img');
+                    img.src = `data:${mime};base64,${b64}`;
+                    img.onclick = () => openModal(img.src, true);
+                    resArea.appendChild(img);
+                    
+                    const cap = document.createElement('div');
+                    cap.innerText = '(Click to Zoom/Download)';
+                    cap.style.textAlign = 'center'; cap.style.color = '#666'; cap.style.fontSize = '0.8em'; cap.style.marginTop = '5px';
+                    resArea.appendChild(cap);
+                }
+            });
+
+            if(!hasImage && !hasText) {
+                log('Warning: No content parts found.');
+                const warnDiv = document.createElement('div');
+                warnDiv.className = 'error-box';
+                warnDiv.innerText = "The model returned a success code but sent no content (Empty Response). Check the 'Raw API Response' dropdown below to see why.";
+                resArea.appendChild(warnDiv);
+            }
+
+        } catch(e) {
+            log(`ERROR: ${e.message}`);
+            // Specific message for timeouts
+            if (e.name === 'AbortError') {
+                resArea.innerHTML = `<div class="error-box"><strong>Timeout:</strong> The request took longer than 5 minutes and was cancelled.</div>`;
+            } else {
+                resArea.innerHTML = `<div class="error-box"><strong>Error:</strong> ${e.message}</div>`;
+            }
+        } finally {
+            clearTimeout(timeoutId); // Stop the timeout timer
+            clearInterval(timerInterval); // Stop the UI timer
+            btn.disabled = false;
+            loader.style.display = 'none';
+        }
+    }
+</script>
+</body>
+</html>
