@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nano Banana Pro v11 (Debug Mode)</title>
+    <title>Nano Banana Pro v13 (Thoughts & 4K Fixed)</title>
     <style>
         :root {
             --bg-color: #0d0d0d;
@@ -79,7 +79,7 @@
         .delete-btn { position: absolute; top: 2px; right: 2px; background: var(--danger); color: white; border: none; width: 16px; height: 16px; border-radius: 50%; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
         /* Result Area */
-        #resultArea { min-height: 50px; }
+        #resultArea { min-height: 50px; display: flex; flex-direction: column; gap: 10px; }
         #resultArea img {
             width: 100%;
             border-radius: 8px;
@@ -88,15 +88,24 @@
             display: block;
             margin-top: 10px;
         }
+        .thought-label {
+            color: var(--accent);
+            font-size: 0.75em;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 10px;
+            letter-spacing: 1px;
+        }
         .response-text {
             background: #222;
             padding: 15px;
             border-radius: 8px;
-            border-left: 4px solid var(--accent);
-            margin-top: 10px;
+            border-left: 2px solid #555;
             white-space: pre-wrap;
-            color: #fff;
+            color: #ccc;
             font-size: 0.9em;
+            line-height: 1.5;
+            font-family: monospace;
         }
         .error-box {
             background: rgba(255, 68, 68, 0.1);
@@ -107,6 +116,14 @@
             margin-top: 10px;
             word-wrap: break-word;
         }
+        .loading {
+            text-align: center;
+            color: var(--accent);
+            font-family: monospace;
+            padding: 10px;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         
         /* Raw Data Inspector */
         details { margin-top: 15px; border-top: 1px solid #333; padding-top: 10px; }
@@ -122,15 +139,16 @@
             overflow-x: auto;
             margin-top: 10px;
             border: 1px solid #333;
+            max-height: 200px;
         }
 
         /* Logs */
         #logArea {
             background: #000; color: #4f4;
             font-family: monospace; font-size: 0.8em;
-            padding: 10px; height: 150px;
+            padding: 10px; height: 100px;
             overflow-y: auto; border-radius: 6px;
-            margin-top: 10px; display: none;
+            margin-top: 10px; display: block;
         }
 
         /* Config Row */
@@ -154,8 +172,8 @@
 <body>
 
 <div class="container">
-    <h1>Nano Banana Pro v11</h1>
-    <div class="model-badge">models/gemini-3-pro-image-preview</div>
+    <h1>Nano Banana Pro v13</h1>
+    <div class="model-badge">model: gemini-3-pro-image-preview</div>
 
     <!-- API Key -->
     <div class="card">
@@ -181,37 +199,37 @@
                     <option value="1:1">1:1 Square</option>
                     <option value="16:9">16:9 Landscape</option>
                     <option value="9:16">9:16 Portrait</option>
-                    <option value="4:3">4:3 (TV)</option>
-                    <option value="3:4">3:4 (Portrait)</option>
-                    <option value="21:9">21:9 Wide</option>
+                    <option value="4:3">4:3</option>
+                    <option value="3:4">3:4</option>
                 </select>
             </div>
             <div>
                 <label>Resolution</label>
                 <select id="resolution">
-                    <option value="1k">1K (Standard)</option>
-                    <option value="2k">2K (High Detail)</option>
-                    <option value="4k">4K (Ultra Sharp)</option>
+                    <option value="1K">1K (Standard)</option>
+                    <option value="2K">2K (High Detail)</option>
+                    <option value="4K">4K (Ultra Sharp)</option>
                 </select>
             </div>
         </div>
 
         <br>
-        <button class="btn btn-primary" id="genBtn" onclick="generate()">Generate</button>
+        <button class="btn btn-primary" id="genBtn" onclick="generate()">Stream Generation</button>
     </div>
 
     <!-- Logs -->
-    <div id="logArea"></div>
+    <div id="logArea">System Ready.</div>
 
     <!-- Result -->
     <div class="card" id="resultCard" style="display:none;">
-        <label>Result</label>
-        <div class="loading" id="loader">Generating...</div>
+        <label>Result Stream</label>
         <div id="resultArea"></div>
+        <!-- Loader is now inside result flow -->
+        <div class="loading" id="loader" style="color:var(--accent);">Connecting...</div>
         
         <!-- Raw Debugger -->
-        <details id="rawDebug" style="display:none;">
-            <summary>🛠️ Troubleshooting: Click to see Raw API Response</summary>
+        <details id="rawDebug">
+            <summary>🛠️ Streaming Data (Raw JSON Chunks)</summary>
             <div class="raw-json" id="rawJsonContent"></div>
         </details>
     </div>
@@ -228,14 +246,13 @@
     // --- State ---
     let inputImages = []; 
     let lastResult = null;
-    let timerInterval = null;
 
     // --- Local Storage ---
     const keyInput = document.getElementById('apiKey');
     if(localStorage.getItem('nb_api_key')) keyInput.value = localStorage.getItem('nb_api_key');
     keyInput.addEventListener('input', (e) => localStorage.setItem('nb_api_key', e.target.value));
 
-    // --- Image Input ---
+    // --- Image Input Handling ---
     document.getElementById('fileInput').addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         if (inputImages.length + files.length > 24) { alert("Max 24 images allowed."); return; }
@@ -284,36 +301,25 @@
 
     function openModal(src, isResult) {
         modal.style.display = 'flex'; modalImg.src = src; modalBtns.innerHTML = ''; 
-        if(isResult && lastResult) {
+        if(isResult) {
             const dlBtn = document.createElement('button');
             dlBtn.className = 'btn btn-primary'; dlBtn.innerText = 'Download';
             dlBtn.onclick = () => { const a = document.createElement('a'); a.href = src; a.download = `nano-banana-${Date.now()}.jpg`; a.click(); };
-            
-            const useBtn = document.createElement('button');
-            useBtn.className = 'btn btn-secondary'; useBtn.innerText = 'Use as Input';
-            useBtn.onclick = () => {
-                if(inputImages.length >= 24) { alert('Max 24 input images.'); return; }
-                inputImages.push({ id: Date.now(), mime: lastResult.mime, data: lastResult.data, preview: `data:${lastResult.mime};base64,${lastResult.data}` });
-                renderInputGrid(); closeModal();
-            };
-            modalBtns.appendChild(dlBtn); modalBtns.appendChild(useBtn);
+            modalBtns.appendChild(dlBtn);
         }
     }
     function closeModal() { modal.style.display = 'none'; }
     modal.onclick = (e) => { if (e.target === modal) closeModal(); }
 
-    // --- Log & Timer ---
+    // --- Logger ---
     const logArea = document.getElementById('logArea');
-    function log(msg, replaceLast = false) {
-        logArea.style.display = 'block';
+    function log(msg) {
         const time = new Date().toLocaleTimeString('en-GB');
-        const content = `<div><span style="color:#666">[${time}]</span> ${msg}</div>`;
-        if(replaceLast && logArea.lastElementChild) { logArea.lastElementChild.innerHTML = `<span style="color:#666">[${time}]</span> ${msg}`; } 
-        else { logArea.innerHTML += content; }
+        logArea.innerHTML += `<div><span style="color:#666">[${time}]</span> ${msg}</div>`;
         logArea.scrollTop = logArea.scrollHeight;
     }
 
-    // --- GENERATE ---
+    // --- CORE GENERATION LOGIC ---
     async function generate() {
         const key = keyInput.value;
         if(!key) return alert('API Key Required');
@@ -325,150 +331,151 @@
         const btn = document.getElementById('genBtn');
         const loader = document.getElementById('loader');
         const resArea = document.getElementById('resultArea');
-        const rawDebug = document.getElementById('rawDebug');
         const rawJsonContent = document.getElementById('rawJsonContent');
 
-        // --- Prompt Engineering ---
-        if(aspect !== 'auto') promptText += `\nAspect Ratio: ${aspect}`;
-        if(resolution === '4k') promptText += `\nStyle: Ultra-high resolution, 4k, masterpiece, highly detailed.`;
-        else if(resolution === '2k') promptText += `\nStyle: High resolution, 2k, sharp.`;
-        promptText += `\nOutput Format: JPEG`; 
-
+        // Reset UI
         btn.disabled = true;
         loader.style.display = 'block';
-        resArea.innerHTML = '';
-        rawDebug.style.display = 'none';
+        loader.innerText = "Initializing Stream...";
+        resArea.innerHTML = ''; // Clear previous results
         rawJsonContent.innerText = '';
         document.getElementById('resultCard').style.display = 'block';
         logArea.innerHTML = ''; 
 
-        // Start Timer
-        let seconds = 0;
-        log('Initializing...');
-        timerInterval = setInterval(() => {
-            seconds++;
-            loader.innerText = `Generating... (${seconds}s)`;
-            if(seconds % 5 === 0) log(`Still processing... (${seconds}s)`, false);
-        }, 1000);
+        // --- 1. CONFIGURATION ---
+        const imageConfig = {};
+        if (resolution) imageConfig.imageSize = resolution; // "1K", "2K", "4K"
+        if (aspect !== 'auto') imageConfig.aspectRatio = aspect; 
 
-        // --- TIMEOUT CONTROLLER ---
-        // We set this to 5 minutes (300,000ms) to ensure we cover the 3-minute requirement safely.
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 300000); 
+        const MODEL_NAME = "gemini-3-pro-image-preview";
+        
+        // --- 2. PREPARE PAYLOAD ---
+        let parts = [{ text: promptText }];
+        inputImages.forEach((img) => { 
+            parts.push({ inline_data: { mime_type: img.mime, data: img.data } }); 
+        });
+
+        const payload = {
+            contents: [{ parts: parts }],
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+            ],
+            generationConfig: { 
+                responseModalities: ["TEXT", "IMAGE"], 
+                imageConfig: imageConfig
+            }
+        };
+
+        const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:streamGenerateContent?key=${key}&alt=sse`;
+
+        log(`Sending request (${resolution})...`);
 
         try {
-            const MODEL_NAME = "gemini-3-pro-image-preview"; 
-            const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${key}`;
-
-            let parts = [{ text: promptText }];
-            inputImages.forEach((img, i) => { parts.push({ inline_data: { mime_type: img.mime, data: img.data } }); });
-
-            const payload = {
-                contents: [{ parts: parts }],
-                safetySettings: [
-                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-                ],
-                generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
-            };
-
-            log('Sending request...');
-            
-            const req = await fetch(URL, {
+            const response = await fetch(URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: controller.signal // Attaching the timeout signal
+                body: JSON.stringify(payload)
             });
 
-            log('Response received.');
-
-            const data = await req.json();
-            
-            // --- RAW DATA DUMP (Shows what API actually sent) ---
-            rawDebug.style.display = 'block';
-            rawJsonContent.innerText = JSON.stringify(data, null, 2);
-
-            if(!req.ok) {
-                throw new Error(data.error?.message || `HTTP ${req.status}`);
-            }
-
-            const candidate = data.candidates?.[0];
-            
-            if(!candidate) {
-                resArea.innerHTML = `<div class="error-box"><strong>Result:</strong> No candidates returned. Check Raw Data below.</div>`;
-                return;
-            }
-
-            if (candidate.finishReason && candidate.finishReason !== "STOP") {
-                log(`⚠️ Finish Reason: ${candidate.finishReason}`);
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'error-box';
-                errorDiv.innerHTML = `<strong>⚠️ Blocked by API</strong><br>Reason: ${candidate.finishReason}<br>This usually means the model refused the request.`;
-                resArea.appendChild(errorDiv);
-                // We keep going just in case there is text content
-            }
-
-            // --- PROCESS CONTENT ---
-            let hasImage = false;
-            let hasText = false;
-            const contentParts = candidate.content?.parts || [];
-
-            contentParts.forEach(part => {
-                // Compatibility: Check for both snake_case (legacy) and camelCase (current API)
-                const imgData = part.inlineData || part.inline_data;
-
-                if(part.text) {
-                    hasText = true;
-                    log(`Text received.`);
-                    const textDiv = document.createElement('div');
-                    textDiv.className = 'response-text';
-                    textDiv.innerText = part.text;
-                    resArea.appendChild(textDiv);
+            if (!response.ok) {
+                const errText = await response.text();
+                try {
+                    const errJson = JSON.parse(errText);
+                    throw new Error(errJson.error.message);
+                } catch(e) {
+                    throw new Error(`HTTP ${response.status}: ${errText}`);
                 }
-                
-                if(imgData) {
-                    hasImage = true;
-                    log('Image received!');
-                    // Compatibility: Check for both mimeType and mime_type
-                    const mime = imgData.mimeType || imgData.mime_type;
-                    const b64 = imgData.data;
-                    
-                    lastResult = { mime: mime, data: b64 };
-                    const img = document.createElement('img');
-                    img.src = `data:${mime};base64,${b64}`;
-                    img.onclick = () => openModal(img.src, true);
-                    resArea.appendChild(img);
-                    
-                    const cap = document.createElement('div');
-                    cap.innerText = '(Click to Zoom/Download)';
-                    cap.style.textAlign = 'center'; cap.style.color = '#666'; cap.style.fontSize = '0.8em'; cap.style.marginTop = '5px';
-                    resArea.appendChild(cap);
-                }
-            });
-
-            if(!hasImage && !hasText) {
-                log('Warning: No content parts found.');
-                const warnDiv = document.createElement('div');
-                warnDiv.className = 'error-box';
-                warnDiv.innerText = "The model returned a success code but sent no content (Empty Response). Check the 'Raw API Response' dropdown below to see why.";
-                resArea.appendChild(warnDiv);
             }
+
+            // --- 3. STREAM READER ---
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            
+            log('Stream connected. Reading thoughts...');
+            loader.innerText = "Processing prompt...";
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                buffer += chunk;
+
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); 
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const jsonStr = line.slice(6);
+                        if (jsonStr.trim() === '[DONE]') continue;
+
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            rawJsonContent.innerText += JSON.stringify(data, null, 2) + ",\n";
+
+                            const candidate = data.candidates?.[0];
+                            if (candidate) {
+                                // A) Handle Text Stream (Thoughts/Reasoning)
+                                const textPart = candidate.content?.parts?.find(p => p.text);
+                                if (textPart) {
+                                    let txtDiv = document.getElementById('stream-text');
+                                    // If text div doesn't exist, create it with a "Process" label
+                                    if(!txtDiv) {
+                                        const label = document.createElement('div');
+                                        label.className = 'thought-label';
+                                        label.innerText = 'Model Thoughts / Process:';
+                                        resArea.appendChild(label);
+
+                                        txtDiv = document.createElement('div');
+                                        txtDiv.id = 'stream-text';
+                                        txtDiv.className = 'response-text';
+                                        resArea.appendChild(txtDiv);
+                                    }
+                                    txtDiv.innerText += textPart.text;
+                                    
+                                    // Update loader to show we are still waiting for image
+                                    loader.innerText = "Thoughts received. Rendering visual...";
+                                }
+
+                                // B) Handle Image Chunk
+                                const imgPart = candidate.content?.parts?.find(p => p.inline_data || p.inlineData);
+                                if (imgPart) {
+                                    log('Image payload received!');
+                                    const imgObj = imgPart.inline_data || imgPart.inlineData;
+                                    
+                                    const img = document.createElement('img');
+                                    img.src = `data:${imgObj.mime_type};base64,${imgObj.data}`;
+                                    img.onclick = () => openModal(img.src, true);
+                                    
+                                    resArea.appendChild(img);
+                                    
+                                    const caption = document.createElement('div');
+                                    caption.innerText = `Generated at ${resolution}`;
+                                    caption.style.textAlign='center'; caption.style.color='#666'; caption.style.fontSize='0.8em';
+                                    resArea.appendChild(caption);
+                                    
+                                    // HIDE LOADER only when image arrives
+                                    loader.style.display = 'none';
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('JSON Parse error on chunk', e);
+                        }
+                    }
+                }
+            }
+            log('Stream finished.');
 
         } catch(e) {
             log(`ERROR: ${e.message}`);
-            // Specific message for timeouts
-            if (e.name === 'AbortError') {
-                resArea.innerHTML = `<div class="error-box"><strong>Timeout:</strong> The request took longer than 5 minutes and was cancelled.</div>`;
-            } else {
-                resArea.innerHTML = `<div class="error-box"><strong>Error:</strong> ${e.message}</div>`;
-            }
+            resArea.innerHTML += `<div class="error-box"><strong>Error:</strong> ${e.message}</div>`;
         } finally {
-            clearTimeout(timeoutId); // Stop the timeout timer
-            clearInterval(timerInterval); // Stop the UI timer
             btn.disabled = false;
+            // Ensure loader is gone if stream finished
             loader.style.display = 'none';
         }
     }
