@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nano Banana Pro v13 (Thoughts & 4K Fixed)</title>
+    <title>Nano Banana Pro v14</title>
     <style>
         :root {
             --bg-color: #0d0d0d;
@@ -12,6 +12,7 @@
             --accent: #ffe135;
             --accent-hover: #eacc28;
             --danger: #ff4444;
+            --danger-hover: #cc3333;
             --border: #333;
             --modal-bg: rgba(0, 0, 0, 0.95);
         }
@@ -55,8 +56,11 @@
         textarea { min-height: 100px; resize: vertical; }
         input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
 
+        /* Button Group */
+        .btn-group { display: flex; gap: 10px; }
+
         .btn {
-            width: 100%;
+            flex: 1;
             padding: 14px;
             border: none;
             border-radius: 8px;
@@ -67,9 +71,15 @@
         }
         .btn-primary { background: var(--accent); color: #000; }
         .btn-primary:hover { background: var(--accent-hover); }
-        .btn-secondary { background: #333; color: #fff; margin-top: 5px; }
+        .btn-primary:disabled { background: #333; color: #666; cursor: not-allowed; }
+        
+        .btn-stop { background: var(--danger); color: white; display: none; }
+        .btn-stop:hover { background: var(--danger-hover); }
+
+        .btn-secondary { background: #333; color: #fff; margin-top: 5px; width: 100%;}
         .btn-secondary:hover { background: #444; }
-        .btn-danger { background: #442222; color: #ff8888; margin-top: 5px; font-size: 0.8em; padding: 8px;}
+        
+        .btn-danger-small { background: #442222; color: #ff8888; margin-top: 5px; font-size: 0.8em; padding: 8px; width: 100%;}
         
         /* Input Image Grid */
         .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 8px; margin-top: 10px; }
@@ -95,6 +105,8 @@
             text-transform: uppercase;
             margin-top: 10px;
             letter-spacing: 1px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
         }
         .response-text {
             background: #222;
@@ -107,6 +119,19 @@
             line-height: 1.5;
             font-family: monospace;
         }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #111;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .timer { color: var(--accent); font-weight: bold; }
+        
         .error-box {
             background: rgba(255, 68, 68, 0.1);
             border: 1px solid var(--danger);
@@ -116,14 +141,6 @@
             margin-top: 10px;
             word-wrap: break-word;
         }
-        .loading {
-            text-align: center;
-            color: var(--accent);
-            font-family: monospace;
-            padding: 10px;
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         
         /* Raw Data Inspector */
         details { margin-top: 15px; border-top: 1px solid #333; padding-top: 10px; }
@@ -172,8 +189,8 @@
 <body>
 
 <div class="container">
-    <h1>Nano Banana Pro v13</h1>
-    <div class="model-badge">model: gemini-3-pro-image-preview</div>
+    <h1>Nano Banana Pro v14</h1>
+    <div class="model-badge">gemini-3-pro-image-preview | REST Stream</div>
 
     <!-- API Key -->
     <div class="card">
@@ -189,7 +206,7 @@
         <label>Input Images (Max 24)</label>
         <input type="file" id="fileInput" multiple accept="image/*" style="font-size: 0.9em;">
         <div class="image-grid" id="inputGrid"></div>
-        <button class="btn btn-danger" onclick="clearImages()" id="clearBtn" style="display:none;">Clear All Images</button>
+        <button class="btn btn-danger-small" onclick="clearImages()" id="clearBtn" style="display:none;">Clear All Images</button>
 
         <div class="config-row" style="margin-top:10px;">
             <div>
@@ -214,7 +231,10 @@
         </div>
 
         <br>
-        <button class="btn btn-primary" id="genBtn" onclick="generate()">Stream Generation</button>
+        <div class="btn-group">
+            <button class="btn btn-primary" id="genBtn" onclick="generate()">Stream Generation</button>
+            <button class="btn btn-stop" id="stopBtn" onclick="stopGeneration()">STOP</button>
+        </div>
     </div>
 
     <!-- Logs -->
@@ -223,9 +243,14 @@
     <!-- Result -->
     <div class="card" id="resultCard" style="display:none;">
         <label>Result Stream</label>
+        
+        <!-- Status Bar with Timer -->
+        <div class="status-bar" id="statusBar">
+            <span id="statusText">Initializing...</span>
+            <span class="timer" id="timer">0.0s</span>
+        </div>
+
         <div id="resultArea"></div>
-        <!-- Loader is now inside result flow -->
-        <div class="loading" id="loader" style="color:var(--accent);">Connecting...</div>
         
         <!-- Raw Debugger -->
         <details id="rawDebug">
@@ -245,7 +270,8 @@
 <script>
     // --- State ---
     let inputImages = []; 
-    let lastResult = null;
+    let abortController = null; // Controls the Stop button
+    let timerInterval = null;   // Controls the clock
 
     // --- Local Storage ---
     const keyInput = document.getElementById('apiKey');
@@ -319,6 +345,24 @@
         logArea.scrollTop = logArea.scrollHeight;
     }
 
+    // --- STOP FUNCTIONALITY ---
+    function stopGeneration() {
+        if (abortController) {
+            abortController.abort(); // Kills the fetch request
+            abortController = null;
+            log('🛑 Generation stopped by user.');
+            document.getElementById('statusText').innerText = "Stopped by User";
+            document.getElementById('statusText').style.color = "#ff4444";
+            endReset();
+        }
+    }
+
+    function endReset() {
+        clearInterval(timerInterval);
+        document.getElementById('genBtn').disabled = false;
+        document.getElementById('stopBtn').style.display = 'none';
+    }
+
     // --- CORE GENERATION LOGIC ---
     async function generate() {
         const key = keyInput.value;
@@ -329,34 +373,53 @@
         const resolution = document.getElementById('resolution').value;
         
         const btn = document.getElementById('genBtn');
-        const loader = document.getElementById('loader');
+        const stopBtn = document.getElementById('stopBtn');
         const resArea = document.getElementById('resultArea');
         const rawJsonContent = document.getElementById('rawJsonContent');
+        const statusText = document.getElementById('statusText');
+        const timerDisplay = document.getElementById('timer');
 
         // Reset UI
         btn.disabled = true;
-        loader.style.display = 'block';
-        loader.innerText = "Initializing Stream...";
-        resArea.innerHTML = ''; // Clear previous results
+        stopBtn.style.display = 'block'; // Show Stop Button
+        
+        resArea.innerHTML = ''; 
         rawJsonContent.innerText = '';
         document.getElementById('resultCard').style.display = 'block';
         logArea.innerHTML = ''; 
 
+        // Start Timer
+        let startTime = Date.now();
+        timerDisplay.innerText = "0.0s";
+        statusText.innerText = "Connecting...";
+        statusText.style.color = "#eaeaea";
+        
+        if(timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            timerDisplay.innerText = elapsed + "s";
+        }, 100);
+
         // --- 1. CONFIGURATION ---
         const imageConfig = {};
-        if (resolution) imageConfig.imageSize = resolution; // "1K", "2K", "4K"
+        // Matching Bash Script Structure: image_size (snake_case)
+        if (resolution) imageConfig.image_size = resolution; // "1K", "2K", "4K"
         if (aspect !== 'auto') imageConfig.aspectRatio = aspect; 
 
         const MODEL_NAME = "gemini-3-pro-image-preview";
         
         // --- 2. PREPARE PAYLOAD ---
-        let parts = [{ text: promptText }];
+        // NOTE: We append a small instruction to encourage text output (thoughts)
+        const finalPrompt = promptText + " (Briefly describe your plan/thoughts for the image first, then generate it.)";
+
+        let parts = [{ text: finalPrompt }];
         inputImages.forEach((img) => { 
             parts.push({ inline_data: { mime_type: img.mime, data: img.data } }); 
         });
 
         const payload = {
             contents: [{ parts: parts }],
+            // Standard Safety Settings
             safetySettings: [
                 { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
                 { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
@@ -371,13 +434,17 @@
 
         const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:streamGenerateContent?key=${key}&alt=sse`;
 
-        log(`Sending request (${resolution})...`);
+        log(`Requesting...`);
+
+        // Initialize AbortController
+        abortController = new AbortController();
 
         try {
             const response = await fetch(URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: abortController.signal // Connects the Stop Button
             });
 
             if (!response.ok) {
@@ -395,9 +462,8 @@
             const decoder = new TextDecoder();
             let buffer = '';
             
-            log('Stream connected. Reading thoughts...');
-            loader.innerText = "Processing prompt...";
-
+            statusText.innerText = "Streaming Thoughts...";
+            
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -423,11 +489,10 @@
                                 const textPart = candidate.content?.parts?.find(p => p.text);
                                 if (textPart) {
                                     let txtDiv = document.getElementById('stream-text');
-                                    // If text div doesn't exist, create it with a "Process" label
                                     if(!txtDiv) {
                                         const label = document.createElement('div');
                                         label.className = 'thought-label';
-                                        label.innerText = 'Model Thoughts / Process:';
+                                        label.innerText = 'Model Thoughts:';
                                         resArea.appendChild(label);
 
                                         txtDiv = document.createElement('div');
@@ -436,15 +501,15 @@
                                         resArea.appendChild(txtDiv);
                                     }
                                     txtDiv.innerText += textPart.text;
-                                    
-                                    // Update loader to show we are still waiting for image
-                                    loader.innerText = "Thoughts received. Rendering visual...";
                                 }
 
                                 // B) Handle Image Chunk
                                 const imgPart = candidate.content?.parts?.find(p => p.inline_data || p.inlineData);
                                 if (imgPart) {
                                     log('Image payload received!');
+                                    statusText.innerText = "Image Received!";
+                                    statusText.style.color = "#4f4";
+                                    
                                     const imgObj = imgPart.inline_data || imgPart.inlineData;
                                     
                                     const img = document.createElement('img');
@@ -457,9 +522,6 @@
                                     caption.innerText = `Generated at ${resolution}`;
                                     caption.style.textAlign='center'; caption.style.color='#666'; caption.style.fontSize='0.8em';
                                     resArea.appendChild(caption);
-                                    
-                                    // HIDE LOADER only when image arrives
-                                    loader.style.display = 'none';
                                 }
                             }
                         } catch (e) {
@@ -469,14 +531,19 @@
                 }
             }
             log('Stream finished.');
+            statusText.innerText = "Complete";
 
         } catch(e) {
-            log(`ERROR: ${e.message}`);
-            resArea.innerHTML += `<div class="error-box"><strong>Error:</strong> ${e.message}</div>`;
+            if (e.name === 'AbortError') {
+                // Already handled by stopGeneration()
+            } else {
+                log(`ERROR: ${e.message}`);
+                resArea.innerHTML += `<div class="error-box"><strong>Error:</strong> ${e.message}</div>`;
+                statusText.innerText = "Error";
+                statusText.style.color = "#ff4444";
+            }
         } finally {
-            btn.disabled = false;
-            // Ensure loader is gone if stream finished
-            loader.style.display = 'none';
+            endReset();
         }
     }
 </script>
