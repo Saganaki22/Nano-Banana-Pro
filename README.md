@@ -1,4 +1,4 @@
-# 🍌 Nano Banana Pro v11 (Web Edition)
+# 🍌 Nano Banana Pro (Web Edition)
 
 I created this lightweight web interface for **Nano Banana Pro** so I can generate images on my phone when I am away from my PC. 
 
